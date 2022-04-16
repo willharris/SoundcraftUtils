@@ -10,37 +10,47 @@ cmds = {
     "da": {
         "func": "dump_aux",
         "help": "dump the nested json for an aux channel",
-        "args": 1
+        "args": ["channel"]
     },
     "di": {
         "func": "dump_input",
         "help": "dump the nested json for an input channel",
-        "args": 1
+        "args": ["channel"]
     },
     "pa": {
         "func": "print_auxes",
         "help": "print the aux channels",
-        "args": 0
+        "args": []
     },
     "pi": {
         "func": "print_inputs",
         "help": "print the input channels",
-        "args": 0
+        "args": []
+    },
+    "r": {
+        "func": "rename_input",
+        "help": "rename the input channel",
+        "args": ["channel", "name"]
+    },
+    "sa": {
+        "func": "swap_auxes",
+        "help": "swap two aux channels",
+        "args": ["channel a", "channel b"]
     },
     "si": {
         "func": "swap_inputs",
         "help": "swap two input channels",
-        "args": 2
+        "args": ["channel a", "channel b"]
     },
     "w": {
         "func": "write_file",
         "help": "write configuration to file",
-        "args": 1
+        "args": ["filename"]
     },
     "q": {
         "func": "quit",
         "help": "quit (also: ctrl-d)",
-        "args": 0
+        "args": []
     }
 }
 
@@ -78,10 +88,22 @@ class Mixer:
 
         return data
 
+    def _do_swap_auxes(self, a: str, b: str) -> None:
+        for chan in [a, b]:
+            if chan not in self.data["a"]:
+                print(f"Could not find aux channel {chan} for swapping")
+                return
+
+        # swap the actual channels
+        tmp = self.data["a"][a]
+        self.data["a"][a] = self.data["a"][b]
+        self.data["a"][b] = tmp
+
+
     def _do_swap_inputs(self, a: str, b: str) -> None:
         for chan in [a, b]:
             if chan not in self.data["i"]:
-                print(f"Could not find channel {chan} for swapping")
+                print(f"Could not find input channel {chan} for swapping")
                 return
 
         # swap the actual channels
@@ -141,11 +163,52 @@ class Mixer:
 
     def print_auxes(self) -> None:
         for a in sorted(self.data["a"].keys(), key=lambda x: int(x)):
-            print("%2d: %s" % (int(a), self.data["a"][a]["name"]))
+            stereo = ""
+            if int(self.data["a"][a]["stereoIndex"]) == 0:
+                stereo = "Stereo L"
+            elif int(self.data["a"][a]["stereoIndex"]) == 1:
+                stereo = "Stereo R"
+
+            print("%2d: %s %s" % (
+                int(a),
+                self.data["a"][a]["name"],
+                f"[{stereo}]" if stereo else ""
+            ))
 
     def print_inputs(self) -> None:
         for i in sorted(self.data["i"].keys(), key=lambda x: int(x)):
-            print("%2d: %s" % (int(i), self.data["i"][i]["name"]))
+            stereo = ""
+            if int(self.data["i"][i]["stereoIndex"]) == 0:
+                stereo = "Stereo L"
+            elif int(self.data["i"][i]["stereoIndex"]) == 1:
+                stereo = "Stereo R"
+            print("%2d: %s %s" % (
+                int(i),
+                self.data["i"][i]["name"],
+                f"[{stereo}]" if stereo else ""
+            ))
+
+    def rename_input(self, channel: str, name: str) -> None:
+        if channel not in self.data["i"]:
+            print(f"Input {input} does not exist")
+            return
+
+        old_name = self.data["i"][channel]["name"]
+        name = name.replace("-", " ")
+        self.data["i"][channel]["name"] = name
+
+        print(f"Renamed input {channel} from {old_name} to {name}")
+
+        self.print_inputs()
+
+    def swap_auxes(self, a: str, b: str) -> None:
+        to_swap = [(a, b)]
+        # TODO stereo pairs
+        for pair in to_swap:
+            self._do_swap_auxes(*pair)
+            print(f"Swapped aux channel {pair[0]} with channel {pair[1]}")
+
+        self.print_auxes()
 
     def swap_inputs(self, a: str, b: str) -> None:
         # check if channel is part of a stereo pair
@@ -174,7 +237,7 @@ class Mixer:
 
         for pair in to_swap:
             self._do_swap_inputs(*pair)
-            print(f"Swapped channel {pair[0]} with channel {pair[1]}")
+            print(f"Swapped input channel {pair[0]} with channel {pair[1]}")
 
         self.print_inputs()
 
@@ -200,17 +263,17 @@ def run_loop(mixer):
     while True:
         print("Commands")
         for k, v in cmds.items():
-            print("%5s - %s [%d]" % (k, v["help"], v["args"]))
+            print("%5s - %s %s" % (k, v["help"], f"(args: {v['args']})" if v["args"] else ""))
 
         try:
             command = input("command> ").split(" ")
         except EOFError:
             break
 
-        if command[0] not in cmds:
+        if command[0].lower() not in cmds:
             print("Invalid command!")
         else:
-            cmd = command[0]
+            cmd = command[0].lower()
             args = command[1:]
             if cmd == "q":
                 break
@@ -219,7 +282,7 @@ def run_loop(mixer):
             except AttributeError:
                 print(
                     f"Uh oh! Couldn't find the function '{cmds[cmd]['func']}'")
-            nargs = cmds[cmd]["args"]
+            nargs = len(cmds[cmd]["args"])
             if nargs != len(args):
                 print(f"Expected {nargs} args, got {len(args)}")
             else:
@@ -236,4 +299,5 @@ if __name__ == "__main__":
     with open(args.config, "r") as config:
         mixer = Mixer(config.read())
 
+    mixer.print_inputs()
     run_loop(mixer)
