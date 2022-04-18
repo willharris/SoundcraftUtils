@@ -127,11 +127,17 @@ class Mixer:
                 print(f"Could not find aux channel {chan} for swapping")
                 return
 
-        # swap the actual channels
+        # swap the actual aux channels
         tmp = self.data["a"][a]
         self.data["a"][a] = self.data["a"][b]
         self.data["a"][b] = tmp
 
+        # swap the various "x" channel aux settings
+        for chan_type in ["f", "i", "l", "p"]:
+            for data in self.data[chan_type].values():
+                tmp = data["aux"][a]
+                data["aux"][a] = data["aux"][b]
+                data["aux"][b] = tmp
 
     def _do_swap_inputs(self, a: str, b: str) -> None:
         for chan in [a, b]:
