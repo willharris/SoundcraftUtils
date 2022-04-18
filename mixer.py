@@ -35,12 +35,12 @@ cmds = {
     "sa": {
         "func": "swap_auxes",
         "help": "swap two aux channels",
-        "args": ["channel a", "channel b"]
+        "args": ["src", "dest"]
     },
     "si": {
         "func": "swap_inputs",
         "help": "swap two input channels",
-        "args": ["channel a", "channel b"]
+        "args": ["src", "dest"]
     },
     "w": {
         "func": "write_file",
@@ -88,6 +88,39 @@ class Mixer:
 
         return data
 
+    def _check_stereo_pairs(self) -> bool:
+        good = True
+        for chan, data in sorted(self.data["i"].items()):
+            if data["stereoIndex"] == 0:
+                pair = str(int(chan) + 1)
+                if pair not in self.data["i"] or self.data["i"][pair]["stereoIndex"] != 1:
+                    print(f"Input channel {chan} ({data['name']}) is Stereo L but channel {pair} is not Stereo R")
+                    good = False
+                    break
+            elif data["stereoIndex"] == 1:
+                pair = str(int(chan) - 1)
+                if pair not in self.data["i"] or self.data["i"][pair]["stereoIndex"] != 0:
+                    print(f"Input channel {chan} ({data['name']}) is Stereo R but channel {pair} is not Stereo L")
+                    good = False
+                    break
+
+        if good:
+            for aux, data in sorted(self.data["a"].items()):
+                if data["stereoIndex"] == 0:
+                    pair = str(int(aux) + 1)
+                    if pair not in self.data["a"] or self.data["a"][pair]["stereoIndex"] != 1:
+                        print(f"Aux channel {aux} ({data['name']}) is Stereo L but channel {pair} is not Stereo R")
+                        good = False
+                        break
+                elif data["stereoIndex"] == 1:
+                    pair = str(int(aux) - 1)
+                    if pair not in self.data["a"] or self.data["a"][pair]["stereoIndex"] != 0:
+                        print(f"Aux channel {aux} ({data['name']}) is Stereo R but channel {pair} is not Stereo L")
+                        good = False
+                        break
+
+        return good
+
     def _do_swap_auxes(self, a: str, b: str) -> None:
         for chan in [a, b]:
             if chan not in self.data["a"]:
@@ -134,7 +167,7 @@ class Mixer:
             self.data["vg"][vg]["_"] = json.dumps(
                 sorted(chans)).replace(" ", "")
 
-    def flatten_data(self, flat_data: dict, key: str, data: dict) -> None:
+    def _flatten_data(self, flat_data: dict, key: str, data: dict) -> None:
         for k, v in data.items():
             # special case
             if k == "LOCAL":
@@ -145,9 +178,13 @@ class Mixer:
                 else:
                     new_key = f"{key}.{k}" if key else k
                 if type(v) is dict:
-                    self.flatten_data(flat_data, new_key, v)
+                    self._flatten_data(flat_data, new_key, v)
                 else:
                     flat_data[new_key] = v
+
+    #
+    # Public methods
+    #
 
     def dump_aux(self, aux: str) -> None:
         if aux not in self.data["a"]:
@@ -201,47 +238,23 @@ class Mixer:
 
         self.print_inputs()
 
-    def swap_auxes(self, a: str, b: str) -> None:
-        to_swap = [(a, b)]
-        # TODO stereo pairs
-        for pair in to_swap:
-            self._do_swap_auxes(*pair)
-            print(f"Swapped aux channel {pair[0]} with channel {pair[1]}")
+    def swap_auxes(self, src: str, dest: str) -> None:
+        self._do_swap_auxes(src, dest)
+        print(f"Swapped aux channel {src} with channel {dest}")
 
         self.print_auxes()
 
-    def swap_inputs(self, a: str, b: str) -> None:
-        # check if channel is part of a stereo pair
-        to_swap = [(a, b)]
-        si_a = self.data["i"][a]["stereoIndex"]
-        si_b = self.data["i"][b]["stereoIndex"]
-        if si_a == 0:
-            to_swap.append((str(int(a) + 1), str(int(b) + 1)))
-        elif si_a == 1:
-            to_swap.append((str(int(a) - 1), str(int(b) - 1)))
-
-        if si_b == 0:
-            to_swap.append((str(int(a) + 1), str(int(b) + 1)))
-        elif si_b == 1:
-            to_swap.append((str(int(a) - 1), str(int(b) - 1)))
-
-        if not all([
-            int(x[0]) >= 0 and int(x[1]) >= 0 and
-            int(x[0]) <= 23 and int(x[1]) <= 23
-            for x in to_swap
-        ]):
-            print("Detected stereo pairs, but swappings would be invalid!")
-            return
-        else:
-            print("Detected stereo pair, will also swap linked channel")
-
-        for pair in to_swap:
-            self._do_swap_inputs(*pair)
-            print(f"Swapped input channel {pair[0]} with channel {pair[1]}")
+    def swap_inputs(self, src: str, dest: str) -> None:
+        self._do_swap_inputs(src, dest)
+        print(f"Swapped input channel {src} with channel {dest}")
 
         self.print_inputs()
 
     def write_file(self, dest: str) -> None:
+        if not self._check_stereo_pairs():
+            print("Invalid stereo pairs, won't write")
+            return
+
         if os.path.exists(dest):
             print(f"File {dest} already exists.")
             overwrite = input("Overwrite? (y/N) ")
@@ -252,12 +265,13 @@ class Mixer:
                 print("Overwriting")
 
         flat_data = {}
-        self.flatten_data(flat_data, "", self.data)
+        self._flatten_data(flat_data, "", self.data)
         with open(dest, "w") as out:
             out.write(json.dumps(
                 flat_data, indent=2, sort_keys=True, ensure_ascii=False))
             out.write("\n")
 
+        print(f"Wrote {dest}")
 
 def run_loop(mixer):
     while True:
