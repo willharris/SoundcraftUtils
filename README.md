@@ -26,3 +26,15 @@ The following documents my reverse-engineered understanding of the mixer's confi
 - s: subgroup
 - v: vca
 - vg: view group
+
+## View Group Numbering
+
+In addition to the main channels, view groups can include other channels. The numbering is as follows:
+
+- 0-23: main channels 1-24
+- 24-25: line in L-R
+- 26-27: player L-R
+- 28-31: FX 1-4
+- 32-37: subgroups 1-6
+- 38-47: aux 1-10
+- 48-53: vca 1-6

@@ -121,6 +121,50 @@ class Mixer:
 
         return good
 
+    def _do_swap_viewgroups(self, a: int, b: int) -> None:
+        # adapt viewgroup channels
+        for vg, val in self.data["vg"].items():
+            chans = json.loads(val["_"])
+            idx_a = -1
+            idx_b = -1
+            try:
+                idx_a = chans.index(a)
+            except ValueError:
+                pass
+                
+            try:
+                idx_b = chans.index(b)
+            except ValueError:
+                pass
+
+            if idx_a > -1:
+                chans[idx_a] = b
+
+            if idx_b > -1:
+                chans[idx_b] = a
+
+            val["_"] = json.dumps(chans).replace(" ", "")
+
+        # adapt local channels
+        for vg in self.data["LOCAL"]["viewGroups"]:
+            idx_a = -1
+            idx_b = -1
+            try:
+                idx_a = vg.index(a)
+            except ValueError:
+                pass
+                
+            try:
+                idx_b = vg.index(b)
+            except ValueError:
+                pass
+
+            if idx_a > -1:
+                vg[idx_a] = b
+
+            if idx_b > -1:
+                vg[idx_b] = a
+
     def _do_swap_auxes(self, a: str, b: str) -> None:
         for chan in [a, b]:
             if chan not in self.data["a"]:
@@ -139,6 +183,9 @@ class Mixer:
                 data["aux"][a] = data["aux"][b]
                 data["aux"][b] = tmp
 
+        # Aux viewgroup indices start at 38
+        self._do_swap_viewgroups(int(a) + 38, int(b) + 38)
+
     def _do_swap_inputs(self, a: str, b: str) -> None:
         for chan in [a, b]:
             if chan not in self.data["i"]:
@@ -156,22 +203,7 @@ class Mixer:
         self.data["i"][b]["scsrc"] = f"ua.{b}"
         self.data["i"][b]["src"] = f"hw.{b}"
 
-        # adapt volume group channels
-        a_int = int(a)
-        b_int = int(b)
-        # new_chans = {}
-        for vg, val in self.data["vg"].items():
-            chans = json.loads(val["_"])
-            to_add = []
-            if a_int in chans:
-                chans.remove(a_int)
-                to_add.append(b_int)
-            if b_int in chans:
-                chans.remove(b_int)
-                to_add.append(a_int)
-            chans.extend(to_add)
-            self.data["vg"][vg]["_"] = json.dumps(
-                sorted(chans)).replace(" ", "")
+        self._do_swap_viewgroups(int(a), int(b))
 
     def _flatten_data(self, flat_data: dict, key: str, data: dict) -> None:
         for k, v in data.items():
