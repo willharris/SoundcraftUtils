@@ -3,7 +3,6 @@ import json
 import os
 
 from argparse import ArgumentParser
-from webbrowser import get
 
 
 cmds = {
@@ -42,6 +41,11 @@ cmds = {
         "help": "swap two input channels",
         "args": ["src", "dest"]
     },
+    "t": {
+        "func": "toggle_hw_input_swapping",
+        "help": "toggle hardware input swapping mode (default: on)",
+        "args": []
+    },
     "w": {
         "func": "write_file",
         "help": "write configuration to file",
@@ -69,6 +73,8 @@ class Mixer:
             self._nest_data(nested_data, keys, v)
 
         self.data = nested_data
+
+        self.swap_hw_inputs = True
 
     def _nest_data(self, data: dict, keys: list, val: any) -> dict:
         key = keys.pop(0)
@@ -131,7 +137,7 @@ class Mixer:
                 idx_a = chans.index(a)
             except ValueError:
                 pass
-                
+
             try:
                 idx_b = chans.index(b)
             except ValueError:
@@ -153,7 +159,7 @@ class Mixer:
                 idx_a = vg.index(a)
             except ValueError:
                 pass
-                
+
             try:
                 idx_b = vg.index(b)
             except ValueError:
@@ -197,11 +203,17 @@ class Mixer:
         self.data["i"][a] = self.data["i"][b]
         self.data["i"][b] = tmp
 
-        # adapt the hardware and "ua"(?) channels
-        self.data["i"][a]["scsrc"] = f"ua.{a}"
-        self.data["i"][a]["src"] = f"hw.{a}"
-        self.data["i"][b]["scsrc"] = f"ua.{b}"
-        self.data["i"][b]["src"] = f"hw.{b}"
+        if self.swap_hw_inputs:
+            # TODO handle input channels with multiple, no mappings, usb daw etc
+            # adapt the hardware and "ua"(?) channels
+            self.data["i"][a]["scsrc"] = f"ua.{a}"
+            self.data["i"][a]["src"] = f"hw.{a}"
+            self.data["i"][b]["scsrc"] = f"ua.{b}"
+            self.data["i"][b]["src"] = f"hw.{b}"
+
+            tmp = self.data["hw"][a]
+            self.data["hw"][a] = self.data["hw"][b]
+            self.data["hw"][b] = tmp
 
         self._do_swap_viewgroups(int(a), int(b))
 
@@ -288,6 +300,10 @@ class Mixer:
 
         self.print_inputs()
 
+    def toggle_hw_input_swapping(self):
+        self.swap_hw_inputs = not self.swap_hw_inputs
+        print(f"HW input swapping mode now: {'on' if self.swap_hw_inputs else 'off'}")
+
     def write_file(self, dest: str) -> None:
         if not self._check_stereo_pairs():
             print("Invalid stereo pairs, won't write")
@@ -310,6 +326,7 @@ class Mixer:
             out.write("\n")
 
         print(f"Wrote {dest}")
+
 
 def run_loop(mixer):
     while True:
