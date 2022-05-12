@@ -51,6 +51,11 @@ cmds = {
         "help": "write configuration to file",
         "args": ["filename"]
     },
+    "wh": {
+        "func": "write_file_hier",
+        "help": "write configuration to file in hierarchical format",
+        "args": ["filename"]
+    },
     "q": {
         "func": "quit",
         "help": "quit (also: ctrl-d)",
@@ -304,7 +309,7 @@ class Mixer:
         self.swap_hw_inputs = not self.swap_hw_inputs
         print(f"HW input swapping mode now: {'on' if self.swap_hw_inputs else 'off'}")
 
-    def write_file(self, dest: str) -> None:
+    def write_file(self, dest: str, flat: bool = True) -> None:
         if not self._check_stereo_pairs():
             print("Invalid stereo pairs, won't write")
             return
@@ -318,14 +323,21 @@ class Mixer:
             else:
                 print("Overwriting")
 
-        flat_data = {}
-        self._flatten_data(flat_data, "", self.data)
+        if flat:
+            write_data = {}
+            self._flatten_data(write_data, "", self.data)
+        else:
+            write_data = self.data
+
         with open(dest, "w") as out:
             out.write(json.dumps(
-                flat_data, indent=2, sort_keys=True, ensure_ascii=False))
+                write_data, indent=2, sort_keys=True, ensure_ascii=False))
             out.write("\n")
 
         print(f"Wrote {dest}")
+
+    def write_file_hier(self, dest: str) -> None:
+        self.write_file(dest, False)
 
 
 def run_loop(mixer):
